@@ -36,8 +36,8 @@ zv_step=${vstep_list[${item}]}
 results_file_1=${DIR_home}/${type}_${width}_kms_${part}_2Df.dat    # OUTPUT 1: 2col file
 echo "# C-ST  NH_${type}   Log_xi  v(km/s) VT (km/s)" >  ${results_file_1}
 echo "# "                                             >> ${results_file_1}
-results_file_2=${DIR_home}/part_${part}/${type}_${width}_kms_${part}_CS_3Df.dat # OUTPUT 2: CS matrix
-results_file_3=${DIR_home}/part_${part}/${type}_${width}_kms_${part}_NH_3Df.dat # OUTPUT 3: NH matrix
+results_file_2=${DIR_home}/${type}_${width}_kms_${part}_CS_3Df.dat # OUTPUT 2: CS matrix
+results_file_3=${DIR_home}/${type}_${width}_kms_${part}_NH_3Df.dat # OUTPUT 3: NH matrix
 
 for xi_start in $(seq ${xi_min} ${xi_step} ${xi_max}) # 2) LOOP OVER LOG_XI
 do
