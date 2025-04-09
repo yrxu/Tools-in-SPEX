@@ -56,7 +56,7 @@ def run_spex_fit(arguments):
 # set up the number of cores
 Ncpus=int(10)
 os.environ["OMP_NUM_THREADS"] = "1"
-pool=mp.Pool(Ncpus)
+pool=mp.Pool(Ncpus,maxtasksperchild=1)
 print("Running in parallel on",Ncpus,"CPUs")
 
 # input files
