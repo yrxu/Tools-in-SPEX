@@ -5,39 +5,28 @@ import os
 import subprocess
 import multiprocessing as mp
 import shutil
+from pyspex import Session
 
 
-### Set up the parameter grids you want to scan, e.g. logxi from -3 to 3 with 21 points i.e. step=0.3; and velocity from -60000km/s to 0km/s with 121 points, i.e. step=500km/s
-xi_vals=np.linspace(-3,3,21)
-zv_vals=np.linspace(-60000,0,121)
 
-##parallelization function
-def jobsub_call(fname):
-    subprocess.call(["bash %s" % (fname)], shell=True)
-    pass
-
-### Set up the number of parallel tasks
-Ncpus=int(10)
-### Set up the number of cores you will use for each task
-os.environ["OMP_NUM_THREADS"] = "1"
-
-pool=mp.Pool(Ncpus)
-
-i=0
-### create the work directory 
-grid_dir='xabs_202407'
-if os.path.exists(grid_dir):
-    shutil.rmtree(grid_dir)
-os.makedirs(grid_dir)
-
-### give an initial value for the line width
-line_width="200" #km/s
-### give the ionization balance file for XABS
-ionbal="/home/yxu/1ES1927/analysis/ionbal/xabs_calculation_202407/xabs_inputfile_corr1" 
-filenames=[]
-for zv in zv_vals:
-    ### set up a suitable initial value for the column density, otherwise SPEX will drop it to zero
-    for xi in xi_vals:
+## function to run the SPEX in parallelization
+def run_spex_fit(arguments):
+    worker_id, grid_points, stat_com, para_com, ion_file, save_dir = arguments
+    session=Session()
+    session.command("log exe "+stat_com)
+    session.command("com xabs")
+    session.command("com rel 4:6 8,9,3,1,7,2")
+    session.command("par 1 9 co av "+ion_file)
+    session.command("par 1 9 xi s f")
+    session.command("par 1 9 zv s f")
+    session.command("par 1 9 v s t")
+    session.command("par 1 9 v r 0 1500")
+    session.command("par 1 9 zv r -2e5 2e5")
+    for idx, xi, zv in grid_points:
+        zv=round(zv)
+        xi=round(xi,4)
+        modstr="zv%s_xi%s" % (str(zv),str(xi))
+        spec_fname=save_dir+"/xabsgrid_%s" % modstr
         if xi<-1:
             nh=5e-5
         elif xi>=-1 and xi<1:
@@ -48,61 +37,63 @@ for zv in zv_vals:
             nh=5e-4
         elif xi>=3:
             nh=8e-4
-        ### remove the tiny float numbers of each grid, though not necessary
-        zv=round(zv)
-        xi=round(xi,4)
-        modstr="zv%s_xi%s" % (str(zv),str(xi))
-        fname=grid_dir+"/xabsgrid_%s.sh" % modstr
-        spec_fname=grid_dir+"/xabsgrid_%s" % modstr
         if not os.path.exists(spec_fname+'.out'):
-            i+=1
-            print("submitting job",i)
-            print(spec_fname+'.out')
-            filenames.append(fname)
-            outfile=open(fname,"w")
+            print("Start to fit the grid of logxi "+str(xi)+ " and velocity "+str(zv)+"km/s.")
+            session.command("log exe "+para_com)
+            session.command("par 1 9 v v 200")
+            session.command("par 1 9 xi v "+str(xi))
+            session.command("par 1 9 nh v "+str(nh))
+            session.command("par 1 9 zv v "+str(zv))
+            session.command("fit iter 5")
+            session.command("fit iter 8")
+            session.command("log out %s over" % spec_fname)
+            session.command("par sho fre")
+            session.command("log close out")
+    session.__del__()
+    print("Worker"+str(worker_id)+" finished "+str(len(grid_points))+" grid fits.")
 
-            preamble=("#!/usr/bin/env bash\n\nspex<<EOF\n\n")
+### set up initials
+# set up the number of cores
+Ncpus=int(10)
+os.environ["OMP_NUM_THREADS"] = "1"
+pool=mp.Pool(Ncpus)
+print("Running in parallel on",Ncpus,"CPUs")
 
-            initials="\n".join(
-                                ["log exe WA_comt+bb_202407_slow", \
-                                "com xabs",\ 
-                                "com rel 4:6 8,9,3,1,7,2",\
-                                "par 1 9 co av "+ionbal,\
-                                "par 1 9 xi s f",\
-                                "par 1 9 v s t",\
-                                "par 1 9 v r 0 1500",\
-                                "par 1 9 zv r -2e5 2e5",\
-                                "par 1 9 zv s f"]
-                                )+"\n\n"
+# input files
+startup_com="/home/yxu/1ES1927/analysis/SPEX/WA_comt+bb_202403_slow" ### startup fitting file
+model_para="/home/yxu/1ES1927/analysis/SPEX/model_para_OM_WA_comt+bb_202403_slow" ### best-fit parameters
+ionization_file="/home/yxu/1ES1927/analysis/ionbal/xabs_calculation_202403/xabs_inputfile_corr1" ### xabs ionization file
 
-            fixed_pars="\n".join(
-                                ["par 1 9 v v "+line_width]
-                                )+"\n"
+# create the work directory
+grid_dir='xabs_202403'
+if not os.path.exists(grid_dir):
+    os.makedirs(grid_dir)
 
-            variable_pars="\n".join(["par 1 9 xi v %s" % str(xi),\
-                                    "par 1 9 zv v %s" % str(zv),\
-                                    "par 1 9 nh v %s" % str(nh),\
-                                    "fit iter 5",\
-                                    "fit iter 3",\
-                                    "log out %s over" % spec_fname,\
-                                    "par sho fre",\
-                                    "log close out"])+"\n"
-
-            post="quit\nEOF"
-
-            outfile.write(preamble+initials+fixed_pars+variable_pars+post)
-            outfile.flush()
-            outfile.close()
+# create the model grids to scan
+xi_vals=np.linspace(-3,3,21)
+zv_vals=np.linspace(-60000,0,121)
 
 
-pool.map(jobsub_call,filenames)
+### prepare for the parallelization
+model_grids=[]
+idx=0
+for xi in xi_vals:
+    for zv in zv_vals:
+        model_grids.append((idx,xi,zv))
+        idx+=1
+N_model_grids=len(model_grids)
+print("number of model grids "+ str(N_model_grids))
 
-    # Loop through all files in the directory
-for filename in os.listdir(grid_dir):
-        # Check if the file ends with .sh
-    if filename.endswith(".sh"):
-            # Construct absolute file path
-        file_path = os.path.join(grid_dir, filename)
-            # Remove the file
-        os.remove(file_path)
-        print(f'Removed: {file_path}')
+# Split the grid among the workers in a round-robin fashion.
+grid_per_worker = [[] for _ in range(Ncpus)]
+for i, grid_point in enumerate(model_grids):
+    grid_per_worker[i % Ncpus].append(grid_point)
+# Build the argument list for the workers.
+worker_params = []
+for worker_id in range(Ncpus):
+    worker_params.append((worker_id, grid_per_worker[worker_id], startup_com, model_para, ionization_file, grid_dir))
+
+### start to run fit in parallel
+pool.map(run_spex_fit, worker_params)
+
+print("The scan is finished.")
