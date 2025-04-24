@@ -12,7 +12,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 ### SPEX set-up
 s = Session()
-s.command('log exe test_MCMC_202403')
+s.command('log exe test_nautilus_202403') #load SPEX data and model
 s.calc()
 model1 = "test_nautilus"
 
