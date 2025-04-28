@@ -30,11 +30,11 @@ def likelihood(param_dict):
     cstat = float(s.fit_cstat()[0])
     return -0.5*cstat
 
-### Run the sampler (not sure what the optimal set-up is yet, most inputs are default or lower for testing)
+### Run the sampler 
 sampler = Sampler(prior, likelihood, n_live=1000, n_networks=4, vectorized=False, pool=4, filepath='test_nautilus.h5',resume=True)
 
 start = time.perf_counter()
-sampler.run(verbose=True, f_live=0.1, n_eff=10000,discard_exploration=True)
+sampler.run(verbose=True, f_live=0.01, n_eff=10000,discard_exploration=True)
 end = time.perf_counter()
 
 ### Get posteriors, plot corner plots (THIS DOES NOT SAVE ANYTHING...yet)
