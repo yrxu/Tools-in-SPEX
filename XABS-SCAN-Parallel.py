@@ -6,8 +6,7 @@ import subprocess
 import multiprocessing as mp
 import shutil
 from pyspex import Session
-
-
+import re
 
 ## function to run the SPEX in parallelization
 def run_spex_fit(arguments):
@@ -65,7 +64,8 @@ model_para="/home/yxu/1ES1927/analysis/SPEX/model_para_OM_WA_comt+bb_202403_slow
 ionization_file="/home/yxu/1ES1927/analysis/ionbal/xabs_calculation_202403/xabs_inputfile_corr1" ### xabs ionization file
 
 # create the work directory
-grid_dir='xabs_202403'
+ID='202403'
+grid_dir='xabs_'+ID
 if not os.path.exists(grid_dir):
     os.makedirs(grid_dir)
 
@@ -97,3 +97,23 @@ for worker_id in range(Ncpus):
 pool.map(run_spex_fit, worker_params)
 
 print("The scan is finished.")
+
+final_file=grid_dir+"/xabs_2Df_"+ID+".dat"
+pattern = r"C-statistic\s*:\s*([0-9.]+)"
+with open(final_file,'w') as summary:
+    summary.write("# C-ST Log_xi v (km/s) VT (km/s)\n")
+    summary.write("#\n")
+    for idx, xi, zv in model_grids:
+        zv=round(zv)
+        xi=round(xi,4)
+        modstr="zv%s_xi%s" % (str(zv),str(xi))
+        spec_fname=grid_dir+"/xabsgrid_%s" % modstr
+        filepath=spec_fname+'.out'
+        with open(filepath, "r") as f:
+            for line in f:
+                match = re.search(pattern, line)
+                if match:
+                    c_stat_value = match.group(1)
+                    summary.write(f"{c_stat_value}\t{xi}\t{zv}\t500\n")
+                    break
+print("The results are saved in "+final_file)
