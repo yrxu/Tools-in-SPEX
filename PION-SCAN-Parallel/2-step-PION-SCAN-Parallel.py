@@ -16,8 +16,6 @@ def run_spex_fit(arguments):
     session.command("com file")
     session.command("com reds")
     session.command("com rel 12 13,3,1,7,2")
-    #session.command("par 1 1 no v " + str(norm))
-    #session.command("par 1 12 file av "+sed_file)
     session.command("par 1 13 fl v 1")
     session.command("par 1 13 z s f")
     session.command("par 1 13 z r -1 1")
@@ -70,10 +68,9 @@ if not os.path.exists(grid_dir):
     os.makedirs(grid_dir)
 
 # input files
-#sed_file="/home/yxu/1ES1927/analysis/ionbal/PION_SED_1ES1927_202410_keV_photonserg.out"
 startup_com="/home/yxu/1ES1927/analysis/SPEX/4WA_comt+bb_"+ID ### startup fitting file
 model_para="/home/yxu/1ES1927/analysis/SPEX/model_para_OM_4WA_comt+bb_"+ID ### best-fit parameters
-#ionization_file="/home/yxu/1ES1927/analysis/SPEX/xabs_calculation_202410/xabs_inputfile_corr1" ### xabs ionization file
+
 
 # create the model grids to scan
 xi_vals=np.linspace(0,6,31)
@@ -93,6 +90,7 @@ print("number of model grids "+ str(N_model_grids))
 grid_per_worker = [[] for _ in range(Ncpus)]
 for i, grid_point in enumerate(model_grids):
     grid_per_worker[i % Ncpus].append(grid_point)
+    
 # Build the argument list for the workers.
 worker_params = []
 for worker_id in range(Ncpus):
