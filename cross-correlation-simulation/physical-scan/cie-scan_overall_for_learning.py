@@ -13,6 +13,9 @@ from pyspex import Session
 import scipy.stats as stats
 import xarray as xr
 import h5py
+import math
+import matplotlib.pyplot as plt
+from itertools import combinations
 
 ##plot and save the residual spectrum
 def plot_save_residual(session,filename):
@@ -181,8 +184,11 @@ def merge_spectra_to_hdf5(folder, zv_vals, kT_vals, output_filename="simulated_m
     # save in the format of HDF5
     ds.to_netcdf(work_dir+'/'+output_filename, engine="h5netcdf")
     print(f"saved to {output_filename}")
-    
 
+### simple cross-correlation
+def cross_correlation(y1, y2):
+    return np.sum(y1 * y2)  
+    
 ##p-value to sigma
 def pvalue_to_sigma(p):
     """Two-tailed p-value conversion."""
@@ -293,3 +299,90 @@ pool.close()
 
 ###merge into the HDF5 file
 merge_spectra_to_hdf5(model_grid_dir, sys_zvs, temperatures, output_filename="simulated_model_spectra_kT"+str(len(temperatures))+"_zv"+str(len(sys_zvs))+".h5")
+
+
+### 3) cross-correlation
+model_file = work_dir+"/simulated_model_spectra_kT"+str(len(temperatures))+"_zv"+str(len(sys_zvs))+".h5"                   # simulated HDF5 file
+real_residual_file = spec_fname_real+".qdp"   # real residual spectrum
+sim_residual_file = work_dir+"/merge_res_"+str(number)+".txt"     # simulated residual spectrum
+output_dir = work_dir+'/'                   # output dir
+
+### read real and simulated data
+real_energy, real_flux = extract_first_instrument(real_residual_file)
+sim_data = np.loadtxt(sim_residual_file)
+sim_energy = sim_data[:, 0]
+sim_flux_all = sim_data[:, 1:]  # shape = (n_energy, N_sim)
+
+### read the model file
+with h5py.File(model_file, "r") as f:
+    model_energy = f["energy"][:]      # (n_energy,)
+    kT_vals      = f["kT"][:]          # (nkT,)
+    zv_vals      = f["zv"][:]/3e5          # (nzv,)
+    models       = f["flux"][:]      # shape: (nkT, nzv, n_energy)
+
+nkT, nzv, n_energy = models.shape
+n_sims = sim_flux_all.shape[1]
+
+### check the consistency between the X-axis
+if not (np.allclose(real_energy, model_energy) and np.allclose(sim_energy, model_energy)):
+    raise ValueError("Energy grids are not aligned!")
+
+### 3-1-1 real residuals vs models
+cc_real = np.zeros((nkT, nzv))
+for i in range(nkT):
+    for j in range(nzv):
+        cc_real[i, j] = cross_correlation(real_flux, models[i, j])
+
+### 3-1-2 sim residual vs models
+cc_sim = np.zeros((nkT, nzv, n_sims))
+for i in range(nkT):
+    for j in range(nzv):
+        for s in range(n_sims):
+            cc_sim[i, j, s] = cross_correlation(sim_flux_all[:, s], models[i, j])
+
+### 3-2 normalization
+cc_real_norm = np.zeros_like(cc_real)
+cc_sim_norm = np.zeros_like(cc_sim)
+
+for i in range(nkT):
+    for j in range(nzv):
+        norm_factor = np.sqrt(np.sum(cc_sim[i, j] ** 2) / n_sims)
+        cc_real_norm[i, j] = cc_real[i, j] / norm_factor
+        cc_sim_norm[i, j]  = cc_sim[i, j] / norm_factor
+
+### 3-3 calculate the significance
+p_min = 1.0 / n_sims
+sigma_max = pvalue_to_sigma(p_min)  # maximal sigma
+print(f"Maximal sigma: {sigma_max:.2f}")
+
+### 3-3-1 calculate the local sigma map
+local_sigma_map = np.zeros((nkT, nzv))
+for i in range(nkT):
+    for j in range(nzv):
+        sim_dist = cc_sim_norm[i, j, :]
+        real_val = cc_real_norm[i, j]
+        frac = np.sum(sim_dist >= real_val) / n_sims
+        sigma = pvalue_to_sigma(frac)
+        sigma = min(sigma, sigma_max)
+        local_sigma_map[i, j] = sigma
+
+### 3-3-2 calculate the global sigma map (look-elsewhere)
+cc_sim_all_flat = cc_sim_norm.reshape(-1, n_sims)  # (n_grids, n_sims)
+global_sigma_map = np.zeros((nkT, nzv))
+cc_sim_all_max = np.max(cc_sim_all_flat,axis=0)
+for i in range(nkT):
+    for j in range(nzv):
+        real_val = cc_real_norm[i, j]
+        frac = np.sum(cc_sim_all_max >= real_val) / cc_sim_all_max.size
+        sigma = pvalue_to_sigma(frac)
+        sigma = min(sigma, sigma_max)
+        global_sigma_map[i, j] = sigma
+
+### save the output
+out_local_sigma    = work_dir+"/local_sigma_map.npy"
+out_global_sigma   = work_dir+"/global_sigma_map.npy"
+
+np.save(out_local_sigma, local_sigma_map)
+np.save(out_global_sigma, global_sigma_map)
+print("Local sigma map saved to "+out_local_sigma)
+print("Global sigma map saved to "+out_global_sigma)
