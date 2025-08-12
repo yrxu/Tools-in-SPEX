@@ -137,14 +137,11 @@ def merge_spectra_to_hdf5(folder, zv_vals, kT_vals, output_filename="simulated_m
             if not (file1 and file2):
                 raise ValueError("Cannot find the files.")
 
-            #kT, zv = parse_params_from_filename(file)
             xs, ys1 = extract_first_instrument_model(file1)
             _ , ys2 = extract_first_instrument_model(file2)
-            ys = ys1 - ys2
-            #data = np.loadtxt(file)
+            ys = ys1 - ys2 #### remove the continuum contribution
 
             if x_template is None:
-                #x_template = data[:, 0]
                 x_template = xs
             else:
                 if not np.allclose(x_template, xs):
@@ -157,20 +154,16 @@ def merge_spectra_to_hdf5(folder, zv_vals, kT_vals, output_filename="simulated_m
     kTs, zvs = zip(*coords)
 
     # get the unique value and re-order
-    #lws_unique = sorted(set(lws))
     kTs_unique = sorted(set(kTs))
     zvs_unique = sorted(set(zvs))
-    #nos_unique = sorted(set(nos))
 
     # create empty array
     y_array = np.empty(( len(kTs_unique), len(zvs_unique), len(x_template)))
 
     # match the spectra
     for idx, (kT, zv) in enumerate(coords):
-        #i = lws_unique.index(lw)
         i = kTs_unique.index(kT)
         j = zvs_unique.index(zv)
-        #k = nos_unique.index(no)
         y_array[i, j, :] = spectra[idx]
 
     # create xarray dataset
@@ -179,10 +172,8 @@ def merge_spectra_to_hdf5(folder, zv_vals, kT_vals, output_filename="simulated_m
             flux=(["kT", "zv",  "energy"], y_array),
         ),
         coords=dict(
-            #lw=lws_unique,
             kT=kTs_unique,
             zv=zvs_unique,
-            #no=nos_unique,
             energy=x_template,
         ),
     )
