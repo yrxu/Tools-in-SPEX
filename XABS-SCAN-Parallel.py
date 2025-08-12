@@ -13,7 +13,7 @@ def run_spex_fit(arguments):
     worker_id, grid_points, stat_com, para_com, ion_file, save_dir = arguments
     session=Session()
     session.command("log exe "+stat_com)
-    session.command("com xabs")
+    session.command("com xabs") ### index of component = 9
     session.command("com rel 4:6 8,9,3,1,7,2")
     session.command("par 1 9 co av "+ion_file)
     session.command("par 1 9 xi s f")
@@ -59,9 +59,9 @@ pool=mp.Pool(Ncpus,maxtasksperchild=1)
 print("Running in parallel on",Ncpus,"CPUs")
 
 # input files
-startup_com="/home/yxu/1ES1927/analysis/SPEX/WA_comt+bb_202403_slow" ### startup fitting file
-model_para="/home/yxu/1ES1927/analysis/SPEX/model_para_OM_WA_comt+bb_202403_slow" ### best-fit parameters
-ionization_file="/home/yxu/1ES1927/analysis/ionbal/xabs_calculation_202403/xabs_inputfile_corr1" ### xabs ionization file
+startup_com="/PATH-TO-YOUR-STARTUP-FILE/WA_comt+bb_202403_slow" ### startup fitting file
+model_para="/PATH-TO-YOUR-BEST-FIT-PARAMETERS/model_para_OM_WA_comt+bb_202403_slow" ### best-fit parameters
+ionization_file="/PATH-TO-YOUR-XABSINPUT-FILE/xabs_inputfile_corr1" ### xabs ionization file
 
 # create the work directory
 ID='202403'
