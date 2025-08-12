@@ -7,10 +7,12 @@ import time
 import subprocess
 import multiprocessing as mp
 import shutil
-import glob
+from glob import glob
 import itertools
 from pyspex import Session
 import scipy.stats as stats
+import xarray as xr
+import h5py
 
 ##plot and save the residual spectrum
 def plot_save_residual(session,filename):
@@ -55,6 +57,40 @@ def simulate_residual_save(arguments):
     session.__del__()
     print("Worker"+str(worker_id)+" finished "+str(N_sim)+" simulations.")
 
+###simulate model spectra and save plot
+def simulate_physical_model_save(arguments):
+    worker_id, grid_points, da_com, reds, linewidth, save_dir = arguments
+    session=Session()
+    session.command("log exe "+da_com)
+    session.command("com cie")
+    session.command("com reds")
+    session.command("com reds")
+    session.command("com rel 1 2,3")
+    session.command("par 1 2 fl v 1")
+    session.command("par 1 2 z s f")
+    session.command("par 1 1 it couple 1 1 t")
+    session.command("par 1 1 t s f")
+    session.command("par 1 1 no s f")
+    session.command("par 1 3 fl v 0")
+    session.command("par 1 3 z v " + str(reds))
+    for idx, t, zv in grid_points:
+        f_name="cie_kT"+str(round(t,5))+"keV_zv"+str(round(zv,5))
+        spec_fname=save_dir+"/%s" % f_name
+        if not (os.path.exists(spec_fname+'.qdp') and os.path.exists(spec_fname+'_ign.qdp')):
+            z=zv/300000
+            session.command("par 1 1 v v "+ str(linewidth))
+            session.command("par 1 1 t v "+str(t))
+            session.command("par 1 1 no v 1") ### don't change this value
+            session.command("par 1 2 z v "+str(z))
+            session.calc()
+            plot_save_model(session=session,filename=spec_fname)
+            session.command("ion ign all")
+            session.calc()
+            plot_save_model(session=session,filename=spec_fname+"_ign")
+            session.command("ion use all") ### simulate model w and wo lines to get the continuum-subtracted model afterwards
+    session.__del__()
+    print("Worker"+str(worker_id)+" finished "+str(len(grid_points))+" model simulations.")
+
 ##extract residual files
 def extract_first_instrument(file_path):
     xs, ys = [], []
@@ -88,7 +124,74 @@ def extract_first_instrument_model(file_path):
             xs.append(float(parts[0]))
             ys.append(float(parts[6]))
     return np.array(xs), np.array(ys)
-  
+
+### merge model spectra to h5 file
+def merge_spectra_to_hdf5(folder, zv_vals, kT_vals, output_filename="simulated_model_spectra.h5"):
+    spectra = []
+    coords = []
+    x_template = None
+    for zv in zv_vals:
+        for kT in kT_vals:
+            file1 = folder+"/cie_kT"+str(round(kT,5))+"keV_zv"+str(round(zv,5))+".qdp"
+            file2 = folder+"/cie_kT"+str(round(kT,5))+"keV_zv"+str(round(zv,5))+"_ign.qdp"
+            if not (file1 and file2):
+                raise ValueError("Cannot find the files.")
+
+            #kT, zv = parse_params_from_filename(file)
+            xs, ys1 = extract_first_instrument_model(file1)
+            _ , ys2 = extract_first_instrument_model(file2)
+            ys = ys1 - ys2
+            #data = np.loadtxt(file)
+
+            if x_template is None:
+                #x_template = data[:, 0]
+                x_template = xs
+            else:
+                if not np.allclose(x_template, xs):
+                    raise ValueError(f"the X-axis data in {file} do not match with others")
+
+            spectra.append(ys)
+            coords.append((kT, zv))
+
+    spectra = np.array(spectra)
+    kTs, zvs = zip(*coords)
+
+    # get the unique value and re-order
+    #lws_unique = sorted(set(lws))
+    kTs_unique = sorted(set(kTs))
+    zvs_unique = sorted(set(zvs))
+    #nos_unique = sorted(set(nos))
+
+    # create empty array
+    y_array = np.empty(( len(kTs_unique), len(zvs_unique), len(x_template)))
+
+    # match the spectra
+    for idx, (kT, zv) in enumerate(coords):
+        #i = lws_unique.index(lw)
+        i = kTs_unique.index(kT)
+        j = zvs_unique.index(zv)
+        #k = nos_unique.index(no)
+        y_array[i, j, :] = spectra[idx]
+
+    # create xarray dataset
+    ds = xr.Dataset(
+        data_vars=dict(
+            flux=(["kT", "zv",  "energy"], y_array),
+        ),
+        coords=dict(
+            #lw=lws_unique,
+            kT=kTs_unique,
+            zv=zvs_unique,
+            #no=nos_unique,
+            energy=x_template,
+        ),
+    )
+
+    # save in the format of HDF5
+    ds.to_netcdf(work_dir+'/'+output_filename, engine="h5netcdf")
+    print(f"saved to {output_filename}")
+    
+
 ##p-value to sigma
 def pvalue_to_sigma(p):
     """Two-tailed p-value conversion."""
@@ -115,11 +218,17 @@ if not os.path.exists(model_grid_dir):
 ### initial setup
 exposure=85655 #seconds 
 number=1000 #number of simulations
+redshift=0.019422 # the redshift of the target
+lw= 100 # linewidth of the CIE model
 index_instrument="1" # simulated instrument
 index_region="1" # simulated model region
 startup_com="2hot+WA_comt+bb_"+ID ### startup fitting file
 data_com="readdata_"+ID ### startup fitting file
 model_parameter="model_para_OM_2hot+WA_comt+bb_"+ID ### best-fit parameters
+# model grids
+sys_zvs = np.arange(-45000,45000,step=1000)
+temperatures = np.logspace(np.log10(0.2),np.log10(4),90)
+
 
 ### 1) Get real and simulated residuals
 #save the real residual file
@@ -168,3 +277,28 @@ merged_data = np.column_stack([x_common] + y_columns)
 # Save merged data to a new file. Adjust format if necessary.
 np.savetxt(work_dir+"/merge_res_"+str(number)+".txt", merged_data, fmt="% .9f", comments='')
 print("Merged data saved to "+work_dir+"/merge_res_"+str(number)+".txt")
+
+### 2) create the model spectrum
+model_grids=[]
+idx=0
+
+for zv in sys_zvs:
+    for t in temperatures:
+        model_grids.append((idx, t, zv))
+        idx+=1
+N_model_grids=len(model_grids)
+print("number of model grids "+ str(N_model_grids))
+
+# Split the grid among the workers in a round-robin fashion.
+grid_per_worker = [[] for _ in range(Ncpus)]
+for i, grid_point in enumerate(model_grids):
+    grid_per_worker[i % Ncpus].append(grid_point)
+# Build the argument list for the workers.
+worker_params = []
+for worker_id in range(Ncpus):
+    worker_params.append((worker_id, grid_per_worker[worker_id], data_com, redshift, lw, model_grid_dir))
+pool.map(simulate_physical_model_save, worker_params)
+pool.close()
+
+###merge into the HDF5 file
+merge_spectra_to_hdf5(model_grid_dir, sys_zvs, temperatures, output_filename="simulated_model_spectra_kT"+str(len(temperatures))+"_zv"+str(len(sys_zvs))+".h5")
