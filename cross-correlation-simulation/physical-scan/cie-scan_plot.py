@@ -27,7 +27,7 @@ global_sigma_map = np.load(out_global_sigma)
 sys_zvs = np.arange(-45000,45000,step=1000)
 temperatures = np.logspace(np.log10(0.2),np.log10(4),90)
 
-zv_vals = sys_zvs
+zv_vals = sys_zvs/3e5
 kT_vals = temperatures 
 
 
