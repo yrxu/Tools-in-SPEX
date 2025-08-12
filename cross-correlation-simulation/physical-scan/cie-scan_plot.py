@@ -21,7 +21,7 @@ from itertools import combinations
 
 ### provide the name of the global sigma map and parameters
 ID="202403"
-work_dir='CC-MC-physical_'+ID
+work_dir='CC-MC-cie_'+ID
 out_global_sigma   = work_dir+"/global_sigma_map.npy"
 global_sigma_map = np.load(out_global_sigma)
 sys_zvs = np.arange(-45000,45000,step=1000)
