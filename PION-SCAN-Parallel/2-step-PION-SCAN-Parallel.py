@@ -68,8 +68,8 @@ if not os.path.exists(grid_dir):
     os.makedirs(grid_dir)
 
 # input files
-startup_com="/home/yxu/1ES1927/analysis/SPEX/4WA_comt+bb_"+ID ### startup fitting file
-model_para="/home/yxu/1ES1927/analysis/SPEX/model_para_OM_4WA_comt+bb_"+ID ### best-fit parameters
+startup_com="/PATH-TO-YOUR-STARTUP-FILE/4WA_comt+bb_"+ID ### startup fitting file
+model_para="/PATH-TO-YOUR-BEST-FIT-PARAMETERS/model_para_OM_4WA_comt+bb_"+ID ### best-fit parameters
 
 
 # create the model grids to scan
