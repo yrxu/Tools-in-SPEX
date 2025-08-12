@@ -7,7 +7,7 @@ import time
 import subprocess
 import multiprocessing as mp
 import shutil
-import glob
+from glob import glob
 import itertools
 from pyspex import Session
 import scipy.stats as stats
@@ -200,7 +200,7 @@ pool.close()
 
 ### merge residual spectra into one file
 # Get list of all files (adjust the glob pattern as needed)
-file_list = glob.glob(grid_dir+"/*.qdp")
+file_list = glob(grid_dir+"/*.qdp")
 # Lists to collect the x data and the y columns from each file
 x_common = None
 y_columns = []
