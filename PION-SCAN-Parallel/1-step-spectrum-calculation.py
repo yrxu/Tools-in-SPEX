@@ -53,7 +53,7 @@ if not os.path.exists(grid_dir):
     os.makedirs(grid_dir)
   
 # input files
-sed_file="/home/yxu/1ES1927/analysis/ionbal/PION_SED_1ES1927_202410_keV_photonserg.out"
+sed_file="/PATH-TO-SED/PION_SED_1ES1927_202410_keV_photonserg.out"
 
 # create the model grids to scan
 norm=8.1302938E+09 #check before running
