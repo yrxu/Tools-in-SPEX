@@ -7,7 +7,7 @@ import time
 import subprocess
 import multiprocessing as mp
 import shutil
-import glob
+from glob import glob
 import itertools
 from pyspex import Session
 import scipy.stats as stats
